@@ -71,7 +71,7 @@ Combatant* getNearestEnemy(Combatant* actor, const std::vector<Combatant*>& part
 void runHumanTurn(Combatant* actor, BattleManager& battle, Grid& grid) {
     bool turnComplete = false;
     while (!turnComplete) {
-        std::cout << "\n[MENU] 1.Attack  2.Guard  3.Move  4.Wait  5.Spell  6.Item\nChoice: ";
+        std::cout << "\n[MENU] 1.Attack  2.Guard  3.Move 4.Spell  5.Item\nChoice: ";
         int choice;
         if (!(std::cin >> choice)) {
             std::cin.clear();
@@ -94,7 +94,7 @@ void runHumanTurn(Combatant* actor, BattleManager& battle, Grid& grid) {
             turnComplete = true;
         }
         else if (choice == 3) { // MOVE
-            std::cout << "Direction (Press 1 to go South, 2 to go North, 3 to go East, 4 to go West.): ";
+            std::cout << "Direction (Press 1 to go North, 2 to go South, 3 to go East, 4 to go West.): ";
             int dir;
             if (!(std::cin >> dir)) {
                 std::cin.clear();
@@ -104,8 +104,8 @@ void runHumanTurn(Combatant* actor, BattleManager& battle, Grid& grid) {
             }
             int cost = 0;
             switch (dir) {
-            case 1: cost = grid.moveCombatant(actor, 0, 1); break; // South is +Y
-            case 2: cost = grid.moveCombatant(actor, 0, -1); break; // North is -Y
+            case 1: cost = grid.moveCombatant(actor, 0, 1); break; // North is +Y
+            case 2: cost = grid.moveCombatant(actor, 0, -1); break; // South is -Y
             case 3: cost = grid.moveCombatant(actor, 1, 0); break; // East is +X
             case 4: cost = grid.moveCombatant(actor, -1, 0); break; // West is -X
             default:
@@ -120,11 +120,7 @@ void runHumanTurn(Combatant* actor, BattleManager& battle, Grid& grid) {
                 std::cout << "Cannot move in that direction.\n";
             }
         }
-        else if (choice == 4) { // WAIT
-            actor->addTicks(COST_MOVE_BASE);
-            turnComplete = true;
-        }
-        else if (choice == 5) { // SPELL
+        else if (choice == 4) { // SPELL
             if (actor->getSpells().empty()) {
                 std::cout << "No spells known!\n";
                 continue;
@@ -154,7 +150,7 @@ void runHumanTurn(Combatant* actor, BattleManager& battle, Grid& grid) {
                 turnComplete = true;
             }
         }
-        else if (choice == 6) { // ITEM
+        else if (choice == 5) { // ITEM
             if (actor->getInventory().empty()) {
                 std::cout << "Inventory empty!\n";
                 continue;
