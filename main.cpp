@@ -8,19 +8,33 @@
 // ==========================================
 // Helper: Target Selection
 // ==========================================
-Combatant* selectTarget(const std::vector<Combatant*>& participants) {
-    std::cout << "\nSelect Target:\n";
+Combatant* selectTarget(Combatant* actor, const std::vector<Combatant*>& participants, bool enemiesOnly) {
+    std::cout << "\nSelect Target (" << (enemiesOnly ? "Enemies" : "Allies") << "):\n";
     std::vector<Combatant*> validTargets;
 
     int index = 1;
     for (auto* p : participants) {
         if (p->isAlive()) {
+            bool isSameTeam = (p->getTeam() == actor->getTeam());
+
+            // If we want enemies only, skip team members
+            if (enemiesOnly && isSameTeam) continue;
+
+            // If we want allies only (beneficial actions), skip enemies
+            if (!enemiesOnly && !isSameTeam) continue;
+
             std::cout << index << ". " << p->getName()
                 << " [" << p->getTeam() << "] (HP: " << p->getHP() << ")\n";
             validTargets.push_back(p);
             index++;
         }
     }
+
+    if (validTargets.empty()) {
+        std::cout << "No valid targets found.\n";
+        return nullptr;
+    }
+
     std::cout << "Choice: ";
     int choice;
     if (!(std::cin >> choice)) {
@@ -40,7 +54,7 @@ Combatant* getNearestEnemy(Combatant* actor, const std::vector<Combatant*>& part
 
     for (auto* target : participants) {
         if (target->getTeam() == targetTeam && target->isAlive() && target->getX() != -1) {
-			float dist = getDistance(actor->getX(), actor->getY(), target->getX(), target->getY());
+            float dist = getDistance(actor->getX(), actor->getY(), target->getX(), target->getY());
             if (dist < minDistance) {
                 minDistance = dist;
                 nearest = target;
@@ -59,10 +73,16 @@ void runHumanTurn(Combatant* actor, BattleManager& battle, Grid& grid) {
     while (!turnComplete) {
         std::cout << "\n[MENU] 1.Attack  2.Guard  3.Move  4.Wait  5.Spell  6.Item\nChoice: ";
         int choice;
-        std::cin >> choice;
+        if (!(std::cin >> choice)) {
+            std::cin.clear();
+            std::cin.ignore(1000, '\n');
+            std::cout << "Invalid input.\n";
+            continue;
+        }
 
         if (choice == 1) { // ATTACK
-            Combatant* target = selectTarget(battle.getParticipants());
+            // Attack always targets enemies
+            Combatant* target = selectTarget(actor, battle.getParticipants(), true);
             if (target && actor->attack(*target, grid)) {
                 actor->addTicks(COST_ATTACK);
                 turnComplete = true;
@@ -74,18 +94,30 @@ void runHumanTurn(Combatant* actor, BattleManager& battle, Grid& grid) {
             turnComplete = true;
         }
         else if (choice == 3) { // MOVE
-            std::cout << "Direction (1.N 2.S 3.E 4.W): ";
-            int dir; std::cin >> dir;
+            std::cout << "Direction (Press 1 to go South, 2 to go North, 3 to go East, 4 to go West.): ";
+            int dir;
+            if (!(std::cin >> dir)) {
+                std::cin.clear();
+                std::cin.ignore(1000, '\n');
+                std::cout << "Invalid input.\n";
+                continue;
+            }
             int cost = 0;
             switch (dir) {
-            case 1: cost = grid.moveCombatant(actor, 0, -1); break;
-            case 2: cost = grid.moveCombatant(actor, 0, 1); break;
-            case 3: cost = grid.moveCombatant(actor, 1, 0); break;
-            case 4: cost = grid.moveCombatant(actor, -1, 0); break;
+            case 1: cost = grid.moveCombatant(actor, 0, 1); break; // South is +Y
+            case 2: cost = grid.moveCombatant(actor, 0, -1); break; // North is -Y
+            case 3: cost = grid.moveCombatant(actor, 1, 0); break; // East is +X
+            case 4: cost = grid.moveCombatant(actor, -1, 0); break; // West is -X
+            default:
+                std::cout << "Invalid direction.\n";
+                continue;
             }
             if (cost > 0) {
                 actor->addTicks(cost);
                 turnComplete = true;
+            }
+            else {
+                std::cout << "Cannot move in that direction.\n";
             }
         }
         else if (choice == 4) { // WAIT
@@ -100,11 +132,23 @@ void runHumanTurn(Combatant* actor, BattleManager& battle, Grid& grid) {
             std::cout << "Select Spell:\n";
             for (size_t i = 0; i < actor->getSpells().size(); ++i) {
                 std::cout << (i + 1) << ". " << actor->getSpells()[i].name
-                    << " (AOE: " << actor->getSpells()[i].aoe << ")\n";
+                    << " (AOE: " << actor->getSpells()[i].aoe
+                    << ", " << actor->getSpells()[i].category << ")\n";
             }
-            int sIdx; std::cin >> sIdx; sIdx--; // 0-based
+            int sIdx;
+            if (!(std::cin >> sIdx) || sIdx < 1 || sIdx > static_cast<int>(actor->getSpells().size())) {
+                std::cin.clear();
+                std::cin.ignore(1000, '\n');
+                std::cout << "Invalid spell selection.\n";
+                continue;
+            }
+            sIdx--; // 0-based
 
-            Combatant* target = selectTarget(battle.getParticipants());
+            // Determine targeting based on category
+            std::string cat = actor->getSpells()[sIdx].category;
+            bool enemiesOnly = (cat == "Debuff");
+
+            Combatant* target = selectTarget(actor, battle.getParticipants(), enemiesOnly);
             if (target && actor->castSpell(*target, sIdx, grid)) {
                 actor->addTicks(COST_SPELL);
                 turnComplete = true;
@@ -118,11 +162,24 @@ void runHumanTurn(Combatant* actor, BattleManager& battle, Grid& grid) {
             std::cout << "Select Item:\n";
             for (size_t i = 0; i < actor->getInventory().size(); ++i) {
                 const auto& item = actor->getInventory()[i];
-                std::cout << (i + 1) << ". " << item.name << " (x" << item.quantity << ")\n";
+                std::cout << (i + 1) << ". " << item.name << " (x" << item.quantity
+                    << ", " << item.category << ")\n";
             }
-            int iIdx; std::cin >> iIdx; iIdx--;
+            int iIdx;
+            if (!(std::cin >> iIdx) || iIdx < 1 || iIdx > static_cast<int>(actor->getInventory().size())) {
+                std::cin.clear();
+                std::cin.ignore(1000, '\n');
+                std::cout << "Invalid item selection.\n";
+                continue;
+            }
+            iIdx--;
 
-            Combatant* target = selectTarget(battle.getParticipants());
+            // Determine targeting based on category
+            std::string cat = actor->getInventory()[iIdx].category;
+            // Assuming Debuffs are the only offensive items, everything else (Healing/Buff/RestoreMP) is friendly
+            bool enemiesOnly = (cat == "Debuff");
+
+            Combatant* target = selectTarget(actor, battle.getParticipants(), enemiesOnly);
             if (target && actor->useItem(*target, iIdx)) {
                 actor->addTicks(COST_ITEM);
                 turnComplete = true;
